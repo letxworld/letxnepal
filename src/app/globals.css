@@ -1,0 +1,142 @@
+/* ==========================================================================
+   letxNepal global styles
+   Source of truth for tokens: design-system/letxnepal/tokens.json
+   Generated:      design-system/letxnepal/tokens.css (ui-ux-pro-max)
+   Do not add raw hex values here or in components — use the CSS variables.
+   ========================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Mukta:wght@300;400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Design tokens ------------------------------------------------------ */
+:root {
+  --color-primary: #0ea5e9;
+  --color-on-primary: #0f172a;
+  --color-secondary: #38bdf8;
+  --color-on-secondary: #0f172a;
+  --color-accent: #ea580c;
+  --color-on-accent: #000000;
+  --color-background: #f0f9ff;
+  --color-foreground: #0c4a6e;
+  --color-card: #ffffff;
+  --color-card-foreground: #0c4a6e;
+  --color-muted: #e8f2f8;
+  --color-muted-foreground: #475569;
+  --color-border: #bae6fd;
+  --color-destructive: #dc2626;
+  --color-on-destructive: #ffffff;
+  --color-ring: #000000;
+
+  --font-heading: "Mukta", "Noto Sans Devanagari", sans-serif;
+  --font-body: "Mukta", "Noto Sans Devanagari", sans-serif;
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    /* Never disable zoom — ui-ux-pro-max layout rule */
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background font-body text-foreground;
+    font-size: 16px; /* base 16px — ui-ux-pro-max typography rule */
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-heading;
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+
+  /* Visible focus for keyboard navigation — never remove focus rings. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  /* Respect reduced motion everywhere. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Only the components this product needs. No decorative extras — the
+     product mandate is "only required buttons, only required decorations". */
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-md;
+  }
+
+  .btn {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-sm rounded-md px-md text-base font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-on-primary hover:opacity-90;
+  }
+
+  .btn-accent {
+    @apply btn bg-accent text-on-accent hover:opacity-90;
+  }
+
+  .btn-secondary {
+    @apply btn border border-border bg-card text-card-foreground hover:bg-muted;
+  }
+
+  .card {
+    @apply rounded-lg border border-border bg-card p-md text-card-foreground shadow-sm;
+  }
+
+  .input {
+    @apply min-h-[44px] w-full rounded-md border border-border bg-card px-md text-base text-card-foreground placeholder:text-muted-foreground focus-visible:outline focus-visible:outline-2;
+  }
+
+  .label {
+    @apply mb-xs block text-base font-medium text-foreground;
+  }
+}
