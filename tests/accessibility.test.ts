@@ -58,7 +58,7 @@ describe("base typography", () => {
 
 describe("source-level label association", () => {
   const files = [
-    "src/components/public/destination-filters.tsx",
+    "src/components/public/filters/destination-filter.tsx",
     "src/app/destinations/page.tsx",
   ];
 

@@ -27,11 +27,14 @@ test.describe("destinations", () => {
     await page.goto("/destinations");
     await expect(page.getByRole("heading", { level: 1, name: "Destinations" })).toBeVisible();
 
-    await page.getByLabel("Hidden gems only").check();
-    await page.getByRole("button", { name: "Apply filters" }).click();
+    // One Filter button opens the panel; the choice is applied from there.
+    await page.getByRole("button", { name: /^Filter/ }).click();
+    await page.getByRole("button", { name: "Hidden gems only" }).click();
+    await page.getByRole("button", { name: /Show \d+/ }).click();
 
     await expect(page).toHaveURL(/hiddenGem=true/);
-    await expect(page.locator("article, a[href^='/destinations/']").first()).toBeVisible();
+    await expect(page.getByText("15 destinations", { exact: true })).toBeVisible();
+    await expect(page.locator("a[href^='/destinations/']").first()).toBeVisible();
   });
 
   test("shows an empty state when nothing matches", async ({ page }) => {

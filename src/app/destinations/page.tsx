@@ -1,17 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DestinationCard } from "@/components/public/destination-card";
-import { DestinationFilters, activeFilterBadges } from "@/components/public/destination-filters";
+import { DestinationFilter } from "@/components/public/filters/destination-filter";
+import { ActiveFilterChips } from "@/components/public/filters/active-filter-chips";
+import { FilterProvider } from "@/components/public/filters/filter-state";
+import { filtersFromSearchParams } from "@/lib/destinations/filter-model";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Badge } from "@/components/ui/badge";
 import { Pagination, ResultsSummary } from "@/components/public/results-summary";
-import { listDestinations, getFilterOptions } from "@/lib/destinations/repository";
+import { PageBackdrop } from "@/components/public/page-backdrop";
+import { listDestinations } from "@/lib/destinations/repository";
 import { parseDestinationFilter } from "@/lib/destinations/filter";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Destinations",
   description:
-    "Browse destinations across all seven provinces of Nepal, filtered by remoteness, access, permit requirement and how well known the place is.",
+    "Browse destinations across all seven provinces of Nepal. Filter by remoteness, access, permits and how well known a place is.",
   alternates: { canonical: "/destinations" },
 };
 
@@ -39,52 +43,36 @@ export default async function DestinationsPage({
   try {
     filter = parseDestinationFilter(flat);
   } catch {
-    const fallback = parseDestinationFilter({});
-    return (
-      <div className="space-y-lg">
-        <h1 className="text-2xl font-semibold text-foreground">Destinations</h1>
-        <EmptyState
-          title="Those filter values are not recognised"
-          description="The filters were ignored and the full list is shown instead."
-          action={
-            <Link href="/destinations" className="btn-secondary">
-              Reset filters
-            </Link>
-          }
-        />
-        <DestinationGrid result={listDestinations(fallback)} />
-      </div>
-    );
+    filter = parseDestinationFilter({});
   }
 
   const result = listDestinations(filter);
-  const options = getFilterOptions();
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(flat)) params.set(key, value);
 
   return (
     <div className="space-y-lg">
-      <header>
+      <PageBackdrop />
+
+      <header className="max-w-3xl">
+        <p className="mb-xs text-sm font-medium uppercase tracking-wide text-primary">
+          All seven provinces
+        </p>
         <h1 className="text-2xl font-semibold text-foreground">Destinations</h1>
-        <p className="mt-xs text-muted-foreground">
-          {result.total} places across Nepal. Filter by province, remoteness, access and how well known
-          the destination is.
+        <p className="mt-md text-base text-muted-foreground">
+          Start from the famous places, or filter down to the ones most visitors never reach.
         </p>
       </header>
 
-      <DestinationFilters filter={filter} resultCount={result.total} districts={options.districts} />
+      <FilterProvider initial={filtersFromSearchParams(params)}>
+        <div className="space-y-sm">
+          <DestinationFilter resultCount={result.total} />
+          <ActiveFilterChips resultCount={result.total} />
+        </div>
+      </FilterProvider>
 
-      <div className="flex flex-wrap items-center gap-sm">
-        <ResultsSummary
-          total={result.total}
-          page={result.page}
-          pageSize={result.pageSize}
-        />
-        {activeFilterBadges(filter).map((badge) => (
-          <Badge key={badge} tone="primary">
-            {badge}
-          </Badge>
-        ))}
+      <div className="flex flex-wrap items-center gap-sm border-b border-border pb-sm">
+        <ResultsSummary total={result.total} page={result.page} pageSize={result.pageSize} />
       </div>
 
       {result.data.length === 0 ? (
@@ -98,7 +86,13 @@ export default async function DestinationsPage({
           }
         />
       ) : (
-        <DestinationGrid result={result} />
+        <ul className="grid gap-md sm:grid-cols-2 lg:grid-cols-3">
+          {result.data.map((destination) => (
+            <li key={destination.slug}>
+              <DestinationCard destination={destination} href={`/destinations/${destination.slug}`} />
+            </li>
+          ))}
+        </ul>
       )}
 
       <Pagination
@@ -108,21 +102,5 @@ export default async function DestinationsPage({
         makeHref={(page) => buildHref(params, page)}
       />
     </div>
-  );
-}
-
-function DestinationGrid({
-  result,
-}: {
-  result: ReturnType<typeof listDestinations>;
-}) {
-  return (
-    <ul className="grid gap-md sm:grid-cols-2 lg:grid-cols-3">
-      {result.data.map((destination) => (
-        <li key={destination.slug}>
-          <DestinationCard destination={destination} href={`/destinations/${destination.slug}`} />
-        </li>
-      ))}
-    </ul>
   );
 }
