@@ -5,7 +5,8 @@ import { getCoverage, getHomeSections, getPriorityProvinces } from "@/lib/destin
 import { PROVINCES } from "@/lib/nepal";
 
 export const metadata: Metadata = {
-  title: "discover the hidden places of Nepal",
+  // Do not set a page title here: the root layout template appends "| letxNepal",
+  // so the site name stays visible in the tab and in search results.
   description:
     "A national platform for Nepal tourism. Iconic destinations and hidden, remote places across all seven provinces, with access, permit and community information.",
   alternates: { canonical: "/" },

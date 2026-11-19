@@ -8,14 +8,17 @@ export function EmptyState({
   title,
   description,
   action,
+  titleAs: Title = "h2",
 }: {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  /** Heading level so empty states fit the page outline instead of always being h2. */
+  titleAs?: React.ElementType;
 }) {
   return (
     <div className={cn("card flex flex-col items-start gap-sm p-lg")}>
-      <p className="text-base font-medium text-foreground">{title}</p>
+      <Title className="text-lg font-medium text-foreground">{title}</Title>
       {description ? <p className="text-muted-foreground">{description}</p> : null}
       {action}
     </div>
@@ -26,14 +29,16 @@ export function ErrorState({
   title,
   description,
   retry,
+  titleAs: Title = "h2",
 }: {
   title: string;
   description?: string;
   retry?: React.ReactNode;
+  titleAs?: React.ElementType;
 }) {
   return (
     <div className="card flex flex-col items-start gap-sm border-destructive/40 p-lg" role="alert">
-      <p className="text-base font-medium text-destructive">{title}</p>
+      <Title className="text-lg font-medium text-destructive">{title}</Title>
       {description ? <p className="text-muted-foreground">{description}</p> : null}
       {retry}
     </div>
