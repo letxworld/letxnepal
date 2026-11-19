@@ -14,35 +14,88 @@ that need it, and travellers who want something quieter have no reliable way to 
 
 ## 2. Mission
 
-Two goals, in priority order. They were stated by the product owner and they drive build
-order:
+Two goals, in priority order. They drive build order:
 
 1. **Surface hidden and remote destinations.** Discovery of under-visited places is the
    product's core, not a filter on the side.
-2. **Grow tourism across all of Nepal.** Every province, and ultimately every district —
-   not only the classic circuit.
+2. **Grow tourism across all of Nepal.** Every province, and ultimately every district.
 
-## 3. Actors and permissions
+## 3. Login roles
 
-Seven actors from the original brief, mapped to five permission roles. Enforcement is
-layered: route guard, input validation, ownership check, scoped query, then Postgres
-row-level security as a database-level safety net.
+Four distinct login types. There is no combined account; each login lands on its own
+dashboard.
 
-| Actor (brief) | Role | Scope |
+| Login role | Lands on | Can do |
 |---|---|---|
-| SuperAdmin | `super_admin` | Global, cross-organisation, bypasses RLS via a dedicated DB role |
-| Admin | `admin` | Global content and moderation; no financial mutation |
-| Hotel Owner / Manager / Lodge | `org_admin` | Own `organization` (hotel, lodge, guest house) |
-| Tourism agency / Cruise / Promoter | `org_admin` | Own `organization` (agency, cruise) |
-| Guide | `guide` | Own `guide_profile`; may be contracted by an agency |
-| Local / Foreign tourist | `customer` | Own bookings, reviews, saved trips |
+| Tourist | Customer dashboard | Book, review, save trips, manage own bookings |
+| Hotel owner | Owner dashboard | Set own room availability and prices, manage own property |
+| Agency | Agency dashboard | List the agency, publish packages |
+| Guide | Guide dashboard | Own profile, contact details, articles |
 
-`cruise` is an organisation type, not a separate role — the permission set is identical
-to an agency, and a separate role would add complexity without changing behaviour.
+## 4. Back-office roles
 
-## 4. Discovery model
+Two layers, and the distinction matters.
 
-"Hidden" is a structured, filterable property. Every destination carries:
+### SuperAdmin
+
+- Provisions and revokes Admins, choosing their domain. This is the only role that can
+  create an Admin account.
+- Holds every capability across every domain.
+- Cannot be used for day-to-day operations; provisioning and destructive actions are
+  audit-logged.
+
+### Admin — scoped to exactly one domain
+
+An Admin is authoritative inside one domain and blind to the other five. This is a
+two-dimensional permission check: `role = admin` **and** `domain = <one of six>`.
+Enforced on every protected route, not only hidden in the UI. An Admin with the blog
+domain receives `403` on a hotel route, and that is covered by a test.
+
+| Domain | Capabilities |
+|---|---|
+| `blog` | Create and edit the single blog page belonging to a destination |
+| `hotel` | Add a listed hotel, remove a listed hotel, assign the owner |
+| `customer` | Manage customer accounts; raise cancellation and refund requests |
+| `finance` | All money movement: charge, refund, payout, reconcile |
+| `flight` | Flight content and booking administration (after provider API) |
+| `bus` | Bus content and ticket administration (after provider API) |
+
+An Admin account is created with exactly one domain. There is no multi-domain Admin;
+granting two domains means two accounts, so no single login accumulates unrelated power.
+
+## 5. Domain handoff: customer to finance
+
+A cancellation raised by the customer Admin becomes a **refund request**, not a refund.
+Only the finance Admin executes it. This is a deliberate handoff between two scoped roles
+so that no single Admin can both raise and settle a money movement.
+
+Rules:
+
+- A refund cannot exceed the original charge.
+- A refund is executed once; the operation is idempotent.
+- Refunds are append-only ledger entries (§7).
+- Above a configurable threshold, a refund requires two finance approvals.
+
+## 6. Content model
+
+### Destinations
+
+A destination carries the discovery taxonomy (§7) and category flags:
+`popular`, `adventurous`, `remote`, `hidden`. SuperAdmin creates destinations; the blog
+Admin writes pages for them.
+
+### Blog pages — one page per destination
+
+A blog post belongs to exactly one destination and is created **after** the destination
+exists. There is no free-floating article. `BlogPost → Destination` is many-to-one.
+
+- The Admin form is "choose a destination, then write its page".
+- The Journal index lists destination pages, not standalone articles.
+- Content is stored as sanitized HTML (§8).
+
+## 7. Discovery taxonomy
+
+Every destination carries:
 
 | Field | Values |
 |---|---|
@@ -50,6 +103,7 @@ to an agency, and a separate role would add complexity without changing behaviou
 | `accessLevel` | road, jeep, trail, flight, boat |
 | `visitationLevel` | iconic, established, emerging, hidden |
 | `hiddenGem` | boolean — true when either flag says hidden |
+| `categories` | popular, adventurous, remote, hidden |
 | `permitRequired` | boolean |
 | `bestSeason` | months |
 | `nearestSettlement` | text |
@@ -59,16 +113,73 @@ to an agency, and a separate role would add complexity without changing behaviou
 | `howToGetThere` | HTML |
 | `coordinatesVerified` | boolean |
 
-Two destinations are both iconic and hidden by different routes (`visitationLevel=hidden`
-or `hiddenGem=true`); `isHiddenGem()` is the single predicate the whole app uses.
+`isHiddenGem()` is the single predicate the app uses.
 
-## 5. Coverage — mission goal 2 made measurable
+## 8. Money and tenancy
 
-`/api/v1/regions/coverage` and `/coverage` report, for each of the 7 provinces:
+### Ledger, not editable columns
 
-- destination count, hidden-gem count, bookable count
-- districts covered out of districts total
-- the explicit list of districts with no destination
+Every financial movement is an **append-only ledger entry**. A correction is a new
+compensating entry; no entry is ever edited or deleted, by any role including finance.
+Each entry records: amount in minor units, currency, type (charge, refund, payout,
+adjustment), actor, organisation, booking, idempotency key, and timestamp.
+
+This is what makes the platform's finances auditable after the fact.
+
+### Hotel owner data
+
+- An owner sets availability and prices **for their own property only**.
+- Enforced by organisation scoping in the query layer and by Postgres row-level security
+  in the database.
+- The hotel Admin does **not** edit availability or prices. The Admin adds and removes
+  listings; owners hold the pricing data.
+
+### Listing removal is a soft delete
+
+Removing a hotel marks it `removed`, keeps the record and every booking, and hides it from
+public listings. A hard delete would destroy booking history and break reconciliation.
+
+### Public API is read-only
+
+`/api/v1/*` accepts `GET` and `HEAD` only, for readers and developers. No write route
+exists in that namespace. Availability and price writes go through the authenticated
+partner API under `/api/v1/org/*`, behind authentication and tenancy.
+
+This is enforced structurally and by a test that asserts the public namespace rejects
+`POST`, `PUT`, `PATCH` and `DELETE`.
+
+## 9. Booking providers
+
+Flight and bus booking depend on an external provider API that is not yet connected.
+The platform defines a **provider adapter** contract — search, quote, book, and a
+booking-status webhook — so the provider plugs in when available.
+
+Until it is connected, the UI states plainly that booking is unavailable rather than
+pretending to work. No fake confirmation is ever shown.
+
+Confirmed: the provider API will be fully functional with all details.
+
+## 10. Actors summary
+
+| Actor | Provisioned by | Scope |
+|---|---|---|
+| SuperAdmin | seeded, one only | everything, plus Admin provisioning |
+| Admin — blog | SuperAdmin | one domain |
+| Admin — hotel | SuperAdmin | one domain |
+| Admin — customer | SuperAdmin | one domain |
+| Admin — finance | SuperAdmin | one domain |
+| Admin — flight | SuperAdmin | one domain |
+| Admin — bus | SuperAdmin | one domain |
+| Hotel owner | self-register, approved by hotel Admin | own organisation |
+| Agency | self-register, approved by hotel Admin | own organisation |
+| Guide | self-register | own profile |
+| Tourist | self-register | own account |
+
+## 11. Coverage — mission goal 2 made measurable
+
+`/api/v1/regions/coverage` and `/coverage` report, per province: destination count,
+hidden-gem count, bookable count, districts covered, and the explicit list of districts
+with no destination.
 
 Current position (seed data, 2026-11-19):
 
@@ -81,66 +192,52 @@ Current position (seed data, 2026-11-19):
 | Districts with no destination | 56 |
 | Estimated households supported | 8,160 |
 
-The 56 zero-coverage districts are the platform's backlog. Without this number, "grow all
-Nepal" would be unfalsifiable.
+## 12. Feature status
 
-## 6. Feature list and status
+| Feature | Status |
+|---|---|
+| Destination catalogue with hidden/remote taxonomy | shipped |
+| Province / district coverage reporting | shipped |
+| Hidden gems index | shipped |
+| Filterable discovery (website + API) | shipped |
+| Trails and adventures | shipped |
+| Public read-only API v1 | shipped |
+| Role and domain permission model (4 login roles, 6 admin domains) | next |
+| Admin HTML blog CMS, one page per destination | planned |
+| Hotel owner availability and price dashboard | planned |
+| Hotel Admin add/remove listing with audit log | planned |
+| Booking flow with finance ledger and refund handoff | planned |
+| Flight and bus via provider adapter | planned |
+| English / Nepali localisation | planned |
+| Map explorer | planned |
 
-| Feature | Status | Notes |
-|---|---|---|
-| Destination catalogue with hidden/remote taxonomy | shipped | 23 seeded |
-| Province / district coverage reporting | shipped | API + page |
-| Hidden gems index | shipped | sorted most remote first |
-| Filterable discovery (website + API) | shipped | shared Zod schema |
-| Trails and adventures | shipped | 5 trails, 6 adventures |
-| Public API v1 | shipped | read-only |
-| Admin HTML blog CMS with sanitized rendering | planned | Task 5 |
-| Hotel inventory and availability dashboard | planned | Task 6 |
-| Booking flow with payments | planned | Task 7 |
-| Ready-made and pay-as-you-go packages | planned | Task 8 |
-| Guide and agency listings, community submissions | planned | Task 9 |
-| Admin coverage dashboard | planned | Task 9b |
-| Rate limiting and API keys | planned | Task 10 |
-| English / Nepali localisation | planned | Task 11 |
-| Map explorer | planned | Task 4b |
-
-### Deliberately deferred (v2+)
+### Deferred
 
 | Item | Reason |
 |---|---|
-| 360° location media | Needs a media pipeline and assets; no source material exists |
-| Ride sharing | Driver onboarding, live GPS, fares and regulatory surface |
-| Bus booking | Needs carrier integration; start with route search |
-| Flight booking | No licensed ticketing API for Nepali carriers |
+| 360° location media | Needs a media pipeline and assets |
+| Ride sharing | Driver onboarding, live GPS, fares, regulation |
 
-## 7. Non-functional requirements
+## 13. Non-functional requirements
 
-- **Simple UI.** The original brief states: "Very simple UI, only required buttons, only
-  required decorations." This is a binding constraint, recorded as an override against the
-  design skill's scroll-storytelling recommendation.
-- **Security.** "Fully secured, far away from hackers." Admin-authored HTML is sanitized
-  server-side. Roles are stored in `app_metadata`, never in user-editable `user_metadata`.
-  Postgres RLS is enabled as a second enforcement layer.
-- **Accessibility.** WCAG 2.1 AA. Contrast ≥ 4.5:1 verified in CI, visible focus, 44×44px
-  touch targets, reduced-motion respected, every input labelled.
-- **Internationalisation.** English default, Nepali fully supported. The primary font must
-  render Devanagari — see the font correction in `docs/provenance.md`.
-- **Performance.** Lighthouse mobile ≥ 90 on public pages; CLS < 0.1.
-- **SEO.** Structured data on destination pages, canonical URLs, sitemap, semantic HTML.
+- **Simple UI.** "Very simple UI, only required buttons, only required decorations." Binding.
+- **Security.** Admin-authored HTML sanitized server-side. Roles and domains come from
+  `app_metadata`, never user-editable claims. Postgres RLS as a second enforcement layer.
+  Finance and provisioning actions audit-logged.
+- **Accessibility.** WCAG 2.1 AA, verified in CI.
+- **Internationalisation.** English default, Nepali fully supported; Devanagari-capable font.
+- **Performance.** Lighthouse mobile ≥ 90; CLS < 0.1.
+- **SEO.** Structured data, canonical URLs, semantic HTML.
 
-## 8. Definition of done
+## 14. Definition of done
 
-A change is done when:
+1. A failing test first, then a passing one.
+2. `tsc --noEmit`, `npm run lint`, `npm test`, `npm run build` all pass.
+3. Verified against the running application, with the real output recorded.
+4. Committed as its own focused commit.
+5. No raw hex, emoji icon, or unlabelled input introduced.
 
-1. It has a failing test written first, then a passing one.
-2. `tsc --noEmit`, `npm run lint`, `npm test` and `npm run build` all pass.
-3. It has been verified against the running application, and the real output is recorded.
-4. It is committed as its own focused commit.
-5. No raw hex value, emoji icon, or unlabelled input has been introduced.
+## 15. Data honesty
 
-## 9. Data honesty
-
-Destination coordinates are approximate. 12 of the 23 seeded destinations carry
-`coordinatesVerified: false`. They are for map placement and distance estimation only and
-must be verified against an authoritative source before launch. The flag exists so that
-verification can be tracked rather than assumed.
+Destination coordinates are approximate. 12 of 23 seeded destinations carry
+`coordinatesVerified: false`. For map placement only; verify before launch.
